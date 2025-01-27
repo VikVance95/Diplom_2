@@ -1,49 +1,57 @@
+import io.qameta.allure.Description;
 import io.qameta.allure.junit4.DisplayName;
-import io.restassured.response.ValidatableResponse;
+import model.User;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import steps.UserSteps;
 
-import static constants.Data.*;
+import static org.apache.http.HttpStatus.SC_OK;
+import static org.apache.http.HttpStatus.SC_UNAUTHORIZED;
+import static org.hamcrest.CoreMatchers.equalTo;
 
 public class UpdateUserDataTest {
 
-    private UserSteps userSteps;
-    private String accessToken;
+    UserSteps testUserSteps = new UserSteps();
+    User testUser = new User();
+
 
     @Before
     public void setUp() {
-        userSteps = new UserSteps();
-    }
-
-    @Test
-    @DisplayName("Обновление данных пользователя с авторизацией")
-    public void changingDataWithAuthPossible() {
-        ValidatableResponse responseCreate = userSteps.createUser(RANDOM_EMAIL, RANDOM_PASS, RANDOM_NAME);
-        userSteps.checkAnswerSuccess(responseCreate);
-        ValidatableResponse responseLogin = userSteps.login(RANDOM_EMAIL, RANDOM_PASS);
-        userSteps.checkAnswerSuccess(responseLogin);
-        accessToken = userSteps.getAccessToken(responseLogin);
-        ValidatableResponse responseChangeWithToken = userSteps.authorizationWithToken(accessToken, "x" + RANDOM_EMAIL, "x" + RANDOM_PASS, "x" + RANDOM_NAME);
-        userSteps.checkAnswerSuccess(responseChangeWithToken);
-    }
-
-    @Test
-    @DisplayName("Обновление данных пользователя без авторизации")
-    public void changingDataWithoutAuthNotPossible() {
-        ValidatableResponse responseCreate = userSteps.createUser(RANDOM_EMAIL, RANDOM_PASS, RANDOM_NAME);
-        userSteps.checkAnswerSuccess(responseCreate);
-        ValidatableResponse responseLogin = userSteps.login(RANDOM_EMAIL, RANDOM_PASS);
-        userSteps.checkAnswerSuccess(responseLogin);
-        accessToken = userSteps.getAccessToken(responseLogin);
-        ValidatableResponse responseChangeWithoutToken = userSteps.authorizationWithoutToken("x" + RANDOM_EMAIL, "x" + RANDOM_PASS, "x" + RANDOM_NAME);
-        userSteps.checkAnswerWithoutToken(responseChangeWithoutToken);
+        testUser.getData();
     }
 
     @After
-    public void close() {
-        userSteps.deletingUsersAfterTests(accessToken);
+    public void tearDown() {
+        testUserSteps.delete();
+    }
+
+    @Test
+    @DisplayName("Изменение данных авторизованного пользователя")
+    @Description("Изменение данных авторизованного пользователя, возвращает 200 ОК")
+    public void changingAuthorizedUserDataTest() {
+        testUserSteps.userUniqueRegistration();
+        testUserSteps.setAccessToken();
+        testUser.getData();
+        testUserSteps.userDataRefresh(testUserSteps.getAccessToken());
+        testUserSteps.getUserData();
+        testUserSteps.getResponse()
+                .then()
+                .assertThat()
+                .statusCode(SC_OK)
+                .body("success", equalTo(true));
+    }
+
+    @Test
+    @DisplayName("Изменение данных неавторизованного пользователя")
+    @Description("Изменение данных неавторизованного пользователя, возвращает 401 Unauthorized")
+    public void changingUnauthorizedUserDataTest() {
+        testUserSteps.userDataRefreshUnauthorised();
+        testUserSteps.getResponse()
+                .then()
+                .assertThat()
+                .statusCode(SC_UNAUTHORIZED)
+                .body("success", equalTo(false));
     }
 
 }

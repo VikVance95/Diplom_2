@@ -1,130 +1,103 @@
 package steps;
 
-import io.qameta.allure.Step;
-import io.restassured.response.ValidatableResponse;
+import constants.BaseSpec;
 import model.User;
-import model.UserCredentials;
-import org.junit.Assert;
+import io.qameta.allure.Step;
+import io.restassured.response.Response;
 
-import static constants.Endpoints.*;
+import java.util.HashMap;
+import java.util.Map;
+
 import static io.restassured.RestAssured.*;
-import static org.hamcrest.Matchers.is;
+import static org.apache.http.HttpStatus.SC_ACCEPTED;
 
-public class UserSteps extends Client {
+public class UserSteps {
 
-    @Step("Создание уникального пользователя")
-    public ValidatableResponse createUser(String email, String password, String name) {
-        User user = new User(email, password, name);
-        return given()
-                .spec(getSpec())
-                .body(user)
+    User userData = new User();
+    private String accessToken;
+    private Response response;
+
+    public Response getResponse() {
+        return response;
+    }
+
+    public void setResponse(Response response) {
+        this.response = response;
+    }
+
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public void setAccessToken() {
+        accessToken = response.then().extract().path("accessToken");
+    }
+
+    @Step("Регистрация нового уникального пользователя")
+    public void userUniqueRegistration() {
+        response = given()
+                .spec(BaseSpec.getBaseSpec())
+                .log().all()
+                .body(userData.getData())
                 .when()
-                .post(AUTH_REGISTER)
-                .then();
+                .post("auth/register");
+    }
 
+    @Step("Вход в учетную запись пользователя по email  и паролю")
+    public void userLogIn() {
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("email", userData.getEmail());
+        dataMap.put("password", userData.getPassword());
+        response = given()
+                .spec(BaseSpec.getBaseSpec())
+                .body(dataMap)
+                .when()
+                .log().all()
+                .post("auth/login");
+    }
+
+    @Step("Получение информации о пользователе")
+    public void getUserData() {
+        response = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("Authorization", accessToken)
+                .when()
+                .get("auth/user");
+    }
+
+    @Step("Обновление данных авторизованного пользователя - смена пароля")
+    public void userDataRefresh(String accessToken) {
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("password", "stopWarInUkraine");
+        response = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("Authorization", accessToken)
+                .body(dataMap)
+                .when()
+                .log().all()
+                .patch("auth/user");
+    }
+
+    @Step("Обновление данных пользователя без авторизации")
+    public void userDataRefreshUnauthorised() {
+        response = given()
+                .spec(BaseSpec.getBaseSpec())
+                .body(userData.getData())
+                .when()
+                .patch("auth/user");
     }
 
     @Step("Удаление пользователя")
-    public void deleteUser(String accessToken) {
+    public void delete() {
+        if (getAccessToken() == null) return;
         given()
-                .header("authorization", accessToken)
-                .spec(getSpec())
+                .spec(BaseSpec.getBaseSpec())
+                .headers("Authorization", accessToken)
                 .when()
-                .delete(AUTH_USER);
-    }
-
-    @Step("Логин пользователя")
-    public ValidatableResponse login(String email, String password) {
-        UserCredentials credentials = new UserCredentials(email, password);
-        return given()
-                .spec(getSpec())
-                .body(credentials)
-                .when()
-                .post(AUTH_LOGIN)
-                .then();
-    }
-
-    @Step("Авторизация с токеном")
-    public ValidatableResponse authorizationWithToken(String accessToken, String email, String password, String name) {
-        User user = new User(email, password, name);
-        return given()
-                .header("authorization", accessToken)
-                .spec(getSpec())
-                .body(user)
-                .when()
-                .patch(AUTH_USER)
-                .then();
-    }
-
-    @Step("Авторизация без токена")
-    public ValidatableResponse authorizationWithoutToken(String email, String password, String name) {
-        User user = new User(email, password, name);
-        return given()
-                .spec(getSpec())
-                .body(user)
-                .when()
-                .patch(AUTH_USER)
-                .then();
-    }
-
-
-    @Step("Получение токена")
-    public String getAccessToken(ValidatableResponse validatableResponse) {
-        return validatableResponse.extract().path("accessToken");
-    }
-
-    @Step("Проверка тела ответа - (success: true) и статуса при создании, изменении данных пользователя или получении списка заказов - 200")
-    public void checkAnswerSuccess(ValidatableResponse validatableResponse) {
-        validatableResponse
-                .body("success", is(true))
-                .statusCode(200);
-    }
-
-    @Step("Проверка тела ответа при создании уже существующего пользователя")
-    public void checkAnswerAlreadyExist(ValidatableResponse validatableResponse) {
-        validatableResponse.assertThat()
-                .body("success", is(false))
-                .and().statusCode(403);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("User already exists", actualMessage);
-    }
-
-    @Step("Валидация ответа при регистрации без поля email, password или name")
-    public void checkAnswerForbidden(ValidatableResponse validatableResponse) {
-        validatableResponse.assertThat()
-                .body("success", is(false))
-                .and().statusCode(403);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("Email, password and name are required fields", actualMessage);
-    }
-
-    @Step("Проверка ответа при авторизации с неверными данными")
-    public void checkAnswerWithWrongData(ValidatableResponse validatableResponse) {
-        validatableResponse.assertThat()
-                .body("success", is(false))
-                .and().statusCode(401);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("email or password are incorrect", actualMessage);
-    }
-
-    @Step("Валидация ответа при изменении данных пользователя без токена")
-    public void checkAnswerWithoutToken(ValidatableResponse validatableResponse) {
-        validatableResponse.assertThat()
-                .body("success", is(false))
-                .and().statusCode(401);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("You should be authorised", actualMessage);
-    }
-
-    @Step("Удаление пользователей после тестов")
-    public void deletingUsersAfterTests(String accessToken) {
-        if (accessToken != null) {
-            deleteUser(accessToken);
-        } else {
-            given().spec(getSpec())
-                    .when()
-                    .delete(AUTH_USER);
-        }
+                .delete("auth/user")
+                .then()
+                .statusCode(SC_ACCEPTED);
+        System.out.println(getAccessToken());
     }
 
 }

@@ -1,47 +1,52 @@
+import io.qameta.allure.Description;
 import io.qameta.allure.junit4.DisplayName;
-import io.restassured.response.ValidatableResponse;
+import model.User;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import steps.UserSteps;
 
-import static constants.Data.*;
+import static org.apache.http.HttpStatus.SC_OK;
+import static org.apache.http.HttpStatus.SC_UNAUTHORIZED;
+import static org.hamcrest.CoreMatchers.equalTo;
 
 public class LoginUserTest {
 
-    private UserSteps userSteps;
-    private String accessToken;
+    UserSteps testUserSteps = new UserSteps();
+    User testUser = new User();
 
     @Before
     public void setUp() {
-        userSteps = new UserSteps();
-        ValidatableResponse responseCreate = userSteps.createUser(RANDOM_EMAIL, RANDOM_PASS, RANDOM_NAME);
-        accessToken = userSteps.getAccessToken(responseCreate);
-    }
-
-    @Test
-    @DisplayName("Успешный логин пользователя")
-    public void loginUserSuccess() {
-        ValidatableResponse responseLogin = userSteps.login(RANDOM_EMAIL, RANDOM_PASS);
-        userSteps.checkAnswerSuccess(responseLogin);
-    }
-
-    @Test
-    @DisplayName("Логин пользователя с неверным email")
-    public void loginUserWithWrongEmailUnauthorized() {
-        ValidatableResponse responseLogin = userSteps.login("wrongEmail@yandex.ru", RANDOM_PASS);
-        userSteps.checkAnswerWithWrongData(responseLogin);
-    }
-
-    @Test
-    @DisplayName("Логин пользователя с неверным паролем")
-    public void loginUserWithWrongPassUnauthorized() {
-        ValidatableResponse responseLogin = userSteps.login(RANDOM_EMAIL, "123456");
-        userSteps.checkAnswerWithWrongData(responseLogin);
+        testUser.getData();
     }
 
     @After
-    public void close() {
-        userSteps.deletingUsersAfterTests(accessToken);
+    public void tearDown() {
+        testUserSteps.delete();
+    }
+
+    @Test
+    @DisplayName("Авторизация с данными существующего пользователя")
+    @Description("Авторизация с данными существующего пользователя, возвращает 200 OK")
+    public void loginUnderExistingUserTest() {
+        testUserSteps.userUniqueRegistration();
+        testUserSteps.userLogIn();
+        testUserSteps.getResponse()
+                .then()
+                .assertThat()
+                .statusCode(SC_OK)
+                .body("success", equalTo(true));
+    }
+
+    @Test
+    @DisplayName("Авторизация пользователя с неверным логином и паролем")
+    @Description("Авторизация пользователя с неверным логином и паролем, возвращает 401 Unauthorized")
+    public void loginWithIncorrectLoginAndPasswordTest() {
+        testUserSteps.userLogIn();
+        testUserSteps.getResponse()
+                .then()
+                .assertThat()
+                .statusCode(SC_UNAUTHORIZED)
+                .body("message", equalTo("email or password are incorrect"));
     }
 }

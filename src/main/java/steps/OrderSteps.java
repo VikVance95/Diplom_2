@@ -1,78 +1,97 @@
 package steps;
 
+import constants.BaseSpec;
 import io.qameta.allure.Step;
-import io.restassured.response.ValidatableResponse;
-import org.junit.Assert;
-import model.Order;
+import io.restassured.response.Response;
 
-import static constants.Endpoints.ORDERS;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.is;
 
-public class OrderSteps extends Client {
-    @Step("Создание заказа без токена")
-    public ValidatableResponse createOrderWithoutToken(Order order) {
-        return given()
-                .spec(getSpec())
-                .body(order)
+public class OrderSteps extends BaseSpec {
+    private List<String> ingredientsList;
+    private Response orderResponse;
+
+    @Step("Извлечение тела ответа")
+    public Response getOrderResponse() {
+        return orderResponse;
+    }
+
+    @Step("Получение списка ингредиентов")
+    public void setIngredientsList() {
+        ingredientsList = given()
+                .spec(BaseSpec.getBaseSpec())
+                .get("ingredients")
+                .then()
+                .extract()
+                .path("data._id");
+    }
+
+    @Step("Создание заказа с токеном авторизации")
+    public void createOrderAuth(String accessToken) {
+        Random random = new Random();
+        String randomIngredientFromList = ingredientsList.get(random.nextInt(ingredientsList.size()));
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("ingredients", randomIngredientFromList);
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("authorization", accessToken)
+                .body(dataMap)
                 .when()
-                .post(ORDERS)
-                .then();
+                .post("orders");
     }
 
-    @Step("Создание заказа с токеном")
-    public ValidatableResponse createOrderWithToken(String accessToken, Order order) {
-        return given()
-                .header("authorization", accessToken)
-                .spec(getSpec())
-                .body(order)
+    @Step("Создание заказа без токена авторизации")
+    public void createOrderUnauth() {
+        Random random = new Random();
+        String randomIngredientFromList = ingredientsList.get(random.nextInt(ingredientsList.size()));
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("ingredients", randomIngredientFromList);
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .body(dataMap)
                 .when()
-                .post(ORDERS)
-                .then();
+                .post("orders");
     }
 
-    @Step("Получение списка заказов без токена")
-    public ValidatableResponse listOfOrdersWithoutToken() {
-        return given()
-                .spec(getSpec())
-                .body("")
+    @Step("Создание заказа без ингредиентов")
+    public void createOrderNoIngredient(String accessToken) {
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("authorization", accessToken)
                 .when()
-                .get(ORDERS)
-                .then();
+                .post("orders");
     }
 
-    @Step("Получение списка заказов с токеном")
-    public ValidatableResponse listOfOrdersWithToken(String accessToken) {
-        return given()
-                .header("authorization", accessToken)
-                .spec(getSpec())
-                .body("")
+    @Step("Создание заказа с неверным хэшэм ингредиентов")
+    public void createOrderWithInvalidIngredientHash(String accessToken) {
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("ingredients", "invalidHash");
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("authorization", accessToken)
+                .body(dataMap)
                 .when()
-                .get(ORDERS)
-                .then();
+                .post("orders");
     }
 
-    @Step("Проверка ответа при создании заказа без ингредиентов")
-    public void checkAnswerWithoutIngredients(ValidatableResponse validatableResponse) {
-        validatableResponse
-                .body("success", is(false))
-                .statusCode(400);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("Ingredient ids must be provided", actualMessage);
+    @Step("Получение заказов конкретного авторизированного пользователя")
+    public void getOrderAuth(String accessToken) {
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .headers("authorization", accessToken)
+                .when()
+                .get("orders");
     }
 
-    @Step("Проверка ответа при создании заказа с неверным хэшем")
-    public void checkAnswerWithWrongHash(ValidatableResponse validatableResponse) {
-        validatableResponse
-                .statusCode(500);
-    }
-
-    @Step("Проверка ответа при получении списка заказов от неавторизованного пользователя")
-    public void checkAnswerGetListNonAuth(ValidatableResponse validatableResponse) {
-        validatableResponse.assertThat()
-                .body("success", is(false))
-                .and().statusCode(401);
-        String actualMessage = validatableResponse.extract().path("message").toString();
-        Assert.assertEquals("You should be authorised", actualMessage);
+    @Step("Получение заказов неавторизованного пользователя")
+    public void getOrderUnauth() {
+        orderResponse = given()
+                .spec(BaseSpec.getBaseSpec())
+                .when()
+                .get("orders");
     }
 }
