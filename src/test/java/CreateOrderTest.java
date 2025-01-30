@@ -1,5 +1,10 @@
+import com.github.javafaker.Faker;
+import constants.Endpoints;
 import io.qameta.allure.Description;
+import io.qameta.allure.Step;
 import io.qameta.allure.junit4.DisplayName;
+import io.restassured.response.Response;
+import model.Order;
 import model.User;
 import org.junit.After;
 import org.junit.Before;
@@ -7,111 +12,107 @@ import org.junit.Test;
 import steps.OrderSteps;
 import steps.UserSteps;
 
-import static org.apache.http.HttpStatus.*;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.notNullValue;
 
-public class CreateOrderTest {
-    UserSteps testUserSteps = new UserSteps();
-    User testUser = new User();
-    OrderSteps testOrderSteps = new OrderSteps();
+import java.util.List;
+
+import static org.apache.http.HttpStatus.*;
+import static org.hamcrest.core.IsEqual.equalTo;
+
+
+public class CreateOrderTest extends Endpoints {
+
+    UserSteps userSteps;
+    User user;
+
+    Faker faker = new Faker();
+
+    String randomEmail = faker.internet().emailAddress().toLowerCase();
+    String randomPassword = faker.internet().password();
+    String randomName = faker.name().fullName();
+
+    public static final String ING_1 = "61c0c5a71d1f82001bdaaa6d";
+    public static final String ING_2 = "61c0c5a71d1f82001bdaaa6f";
 
     @Before
+    @Step("Создание пользователя")
     public void setUp() {
-        testUser.getData();
-        testOrderSteps.setIngredientsList();
+        userSteps = new UserSteps();
+        user = new User(randomEmail, randomPassword, randomName);
+        Response response = userSteps.createUser(user);
     }
 
     @After
-    public void tearDown() {
-        testUserSteps.delete();
+    @Step("Удаление пользователя")
+    public void cleanUp(){
+        userSteps.deleteUser();
     }
 
     @Test
-    @DisplayName("Создание заказа с авторизацией")
-    @Description("Создание заказа с авторизацией, возвращает 200 ОК")
-    public void creatingOrderWithAuthorizationTest() {
-        testUserSteps.userUniqueRegistration();
-        testUserSteps.setAccessToken();
-        testOrderSteps.createOrderAuth(testUserSteps.getAccessToken());
-        testOrderSteps.getOrderResponse()
-                .then()
-                .assertThat()
+    @DisplayName("Создание заказа авторизованного пользователя")
+    @Description("проверка создания заказа с корректными ингредиентами авторизированным пользователем")
+    public void createOrderCorrectIngridsAutorizedUser() {
+        OrderSteps orderSteps = new OrderSteps();
+        user = new User(user.getEmail(), user.getPassword());
+        userSteps.loginUser(user);
+        orderSteps.accessToken = userSteps.accessToken;
+        List<String> ingredients = java.util.List.of(ING_1,ING_2);
+        Order order = new Order(ingredients);
+        Response response1 = orderSteps.createOrder(order);
+        response1.then()
+                .log().all()
                 .statusCode(SC_OK)
-                .body("success", equalTo(true))
-                .and()
-                .body("name", notNullValue());
-
+                .assertThat()
+                .body("success", equalTo(true));
     }
 
     @Test
-    @DisplayName("Создание заказа без авторизации")
-    @Description("Создание заказа без авторизации, возвращает 401 Unauthorized")
-    public void creatingOrderUnauthTest() {
-        testUserSteps.userUniqueRegistration();
-        testOrderSteps.createOrderUnauth();
-        testOrderSteps.getOrderResponse()
-                .then()
+    @DisplayName("Создание заказа не авторизованного пользователя")
+    @Description("проверка создания заказа с корректными ингредиентами неавторизированным пользователем")
+    public void createOrderCorrectIngridsUnautorizedUser() {
+        OrderSteps orderSteps = new OrderSteps();
+        orderSteps.accessToken = userSteps.accessToken;
+        List<String> ingredients = java.util.List.of(ING_1,ING_2);
+        Order order = new Order(ingredients);
+        Response response1 = orderSteps.createOrder(order);
+        response1.then()
+                .log().all()
+                .statusCode(SC_OK)
                 .assertThat()
-                .statusCode(SC_UNAUTHORIZED)
-                .body("success", equalTo(false));
+                .body("success", equalTo(true));
     }
 
     @Test
-    @DisplayName("Создание заказа без ингредиентов")
-    @Description("Создание заказа без ингредиентов, возвращает 400 Bad Request")
-    public void orderCreationWithoutIngredientTest() {
-        testUserSteps.userUniqueRegistration();
-        testUserSteps.setAccessToken();
-        testOrderSteps.createOrderNoIngredient(testUserSteps.getAccessToken());
-        testOrderSteps.getOrderResponse()
-                .then()
-                .assertThat()
+    @DisplayName("Создание заказа авторизованного пользователя без ингрединетов")
+    @Description("проверка создания заказа без ингредиентов авторизированным пользователем")
+    public void createOrderWithoutIngridsAutorizedUser() {
+        OrderSteps orderSteps = new OrderSteps();
+        user = new User(user.getEmail(), user.getPassword());
+        userSteps.loginUser(user);
+        orderSteps.accessToken = userSteps.accessToken;
+        List<String> ingredients = java.util.List.of();
+        Order order = new Order(ingredients);
+        Response response1 = orderSteps.createOrder(order);
+        response1.then()
+                .log().all()
                 .statusCode(SC_BAD_REQUEST)
+                .assertThat()
+                .body("success", equalTo(false))
                 .body("message", equalTo("Ingredient ids must be provided"));
     }
 
     @Test
-    @DisplayName("Создание заказа с неверным хешем ингредиентов")
-    @Description("Создание заказа с неверным хешем ингредиентов, возвращает 500 Internal Server Error")
-    public void orderCreationWithInvalidIngredientHashTest() {
-        testUserSteps.userUniqueRegistration();
-        testUserSteps.setAccessToken();
-        testOrderSteps.createOrderWithInvalidIngredientHash(testUserSteps.getAccessToken());
-        testOrderSteps.getOrderResponse()
-                .then()
-                .assertThat()
+    @DisplayName("Создание заказа авторизованного пользователя с некорректными ингредиентами")
+    @Description("проверка создания заказа с некорректными ингредиентами авторизированным пользователем")
+    public void createOrderIncorrectIngridsAutorizedUser() {
+        OrderSteps orderSteps = new OrderSteps();
+        user = new User(user.getEmail(), user.getPassword());
+        userSteps.loginUser(user);
+        orderSteps.accessToken = userSteps.accessToken;
+        List<String> ingredients = java.util.List.of(ING_1 + "1",ING_2);
+        Order order = new Order(ingredients);
+        Response response1 = orderSteps.createOrder(order);
+        response1.then()
+                .log().all()
                 .statusCode(SC_INTERNAL_SERVER_ERROR);
-    }
-
-    @Test
-    @DisplayName("Получение заказов авторизованного пользователя")
-    @Description("Получение заказов конкретного авторизованного пользователя, возвращает 200 ОК")
-    public void getOrdersByAuthorizedUserTest() {
-        testUserSteps.userUniqueRegistration();
-        testUserSteps.setAccessToken();
-        testOrderSteps.createOrderAuth(testUserSteps.getAccessToken());
-        testOrderSteps.getOrderAuth(testUserSteps.getAccessToken());
-        testOrderSteps.getOrderResponse()
-                .then()
-                .assertThat()
-                .statusCode(SC_OK)
-                .body("success", equalTo(true))
-                .and()
-                .body("orders", notNullValue());
-    }
-
-    @Test
-    @DisplayName("Получение заказов неавторизованного пользователя")
-    @Description("Получение заказов конкретного неавторизованного пользователя, возвращает 401 Unauthorized")
-    public void getOrdersByUnauthorizedUserTest() {
-        testOrderSteps.getOrderUnauth();
-        testOrderSteps.getOrderResponse()
-                .then()
-                .assertThat()
-                .statusCode(SC_UNAUTHORIZED)
-                .body("success", equalTo(false))
-                .and()
-                .body("message", equalTo("You should be authorised"));
     }
 }

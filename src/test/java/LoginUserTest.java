@@ -1,52 +1,78 @@
+import com.github.javafaker.Faker;
 import io.qameta.allure.Description;
+import io.qameta.allure.Step;
 import io.qameta.allure.junit4.DisplayName;
+import io.restassured.response.Response;
+import constants.Endpoints;
+import steps.UserSteps;
 import model.User;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import steps.UserSteps;
 
 import static org.apache.http.HttpStatus.SC_OK;
 import static org.apache.http.HttpStatus.SC_UNAUTHORIZED;
-import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.core.IsEqual.equalTo;
 
-public class LoginUserTest {
+public class LoginUserTest extends Endpoints {
 
-    UserSteps testUserSteps = new UserSteps();
-    User testUser = new User();
+    UserSteps userSteps;
+    User user;
+
+    Faker faker = new Faker();
+
+    String randomEmail = faker.internet().emailAddress().toLowerCase();
+    String randomPassword = faker.internet().password();
+    String randomName = faker.name().fullName();
 
     @Before
-    public void setUp() {
-        testUser.getData();
+    @Step("Создание пользователя")
+    public void setUp(){
+        userSteps = new UserSteps();
+        user = new User(randomEmail, randomPassword, randomName);
+        Response response = userSteps.createUser(user);
     }
 
     @After
-    public void tearDown() {
-        testUserSteps.delete();
+    @Step("Удаление пользователя")
+    public void cleanUp(){
+        userSteps.deleteUser();
     }
 
     @Test
-    @DisplayName("Авторизация с данными существующего пользователя")
-    @Description("Авторизация с данными существующего пользователя, возвращает 200 OK")
-    public void loginUnderExistingUserTest() {
-        testUserSteps.userUniqueRegistration();
-        testUserSteps.userLogIn();
-        testUserSteps.getResponse()
-                .then()
+    @DisplayName("Успешная авторизация")
+    @Description("проверка успешной авторизации пользователя")
+    public void loginCorrectDataTest(){
+        user = new User(user.getEmail(), user.getPassword());
+        Response response = userSteps.loginUser(user);
+        response.then().statusCode(SC_OK)
                 .assertThat()
-                .statusCode(SC_OK)
-                .body("success", equalTo(true));
+                .body("success", equalTo(true))
+                .body("accessToken", notNullValue());
     }
 
     @Test
-    @DisplayName("Авторизация пользователя с неверным логином и паролем")
-    @Description("Авторизация пользователя с неверным логином и паролем, возвращает 401 Unauthorized")
-    public void loginWithIncorrectLoginAndPasswordTest() {
-        testUserSteps.userLogIn();
-        testUserSteps.getResponse()
-                .then()
+    @DisplayName("Авторизация с неверной почтой")
+    @Description("проверка того, что нельзя авторизоваться с неверной почтой")
+    public void cantLoginIncorrectEmailTest(){
+        user = new User("1" +user.getEmail(), user.getPassword());
+        Response response = userSteps.loginUser(user);
+        response.then().statusCode(SC_UNAUTHORIZED)
                 .assertThat()
-                .statusCode(SC_UNAUTHORIZED)
+                .body("success", equalTo(false))
+                .body("message", equalTo("email or password are incorrect"));
+    }
+
+    @Test
+    @DisplayName("Авторизация с неверным паролем")
+    @Description("проверка того, что нельзя авторизоваться с неверным паролем")
+    public void cantLoginIncorrectPasswordTest(){
+        user = new User(user.getEmail(), "1" + user.getPassword());
+        Response response = userSteps.loginUser(user);
+        response.then().statusCode(SC_UNAUTHORIZED)
+                .assertThat()
+                .body("success", equalTo(false))
                 .body("message", equalTo("email or password are incorrect"));
     }
 }

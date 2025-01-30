@@ -1,103 +1,78 @@
 package steps;
 
-import constants.BaseSpec;
-import model.User;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
+import model.User;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import static io.restassured.RestAssured.*;
-import static org.apache.http.HttpStatus.SC_ACCEPTED;
+import static io.restassured.RestAssured.given;
+import static constants.Endpoints.*;
 
 public class UserSteps {
+    public Response handleCreate;
+    public Response handleLogin;
+    public String accessToken;
 
-    User userData = new User();
-    private String accessToken;
-    private Response response;
 
-    public Response getResponse() {
-        return response;
-    }
-
-    public void setResponse(Response response) {
-        this.response = response;
-    }
-
-    public String getAccessToken() {
-        return accessToken;
-    }
-
-    public void setAccessToken() {
-        accessToken = response.then().extract().path("accessToken");
-    }
-
-    @Step("Регистрация нового уникального пользователя")
-    public void userUniqueRegistration() {
-        response = given()
-                .spec(BaseSpec.getBaseSpec())
-                .log().all()
-                .body(userData.getData())
-                .when()
-                .post("auth/register");
-    }
-
-    @Step("Вход в учетную запись пользователя по email  и паролю")
-    public void userLogIn() {
-        Map<String, String> dataMap = new HashMap<>();
-        dataMap.put("email", userData.getEmail());
-        dataMap.put("password", userData.getPassword());
-        response = given()
-                .spec(BaseSpec.getBaseSpec())
-                .body(dataMap)
-                .when()
-                .log().all()
-                .post("auth/login");
-    }
-
-    @Step("Получение информации о пользователе")
-    public void getUserData() {
-        response = given()
-                .spec(BaseSpec.getBaseSpec())
-                .headers("Authorization", accessToken)
-                .when()
-                .get("auth/user");
-    }
-
-    @Step("Обновление данных авторизованного пользователя - смена пароля")
-    public void userDataRefresh(String accessToken) {
-        Map<String, String> dataMap = new HashMap<>();
-        dataMap.put("password", "stopWarInUkraine");
-        response = given()
-                .spec(BaseSpec.getBaseSpec())
-                .headers("Authorization", accessToken)
-                .body(dataMap)
-                .when()
-                .log().all()
-                .patch("auth/user");
-    }
-
-    @Step("Обновление данных пользователя без авторизации")
-    public void userDataRefreshUnauthorised() {
-        response = given()
-                .spec(BaseSpec.getBaseSpec())
-                .body(userData.getData())
-                .when()
-                .patch("auth/user");
+    @Step("Создание пользователя")
+    public Response createUser(User user) {
+        handleCreate =
+                given()
+                        .header("Content-type", "application/json")
+                        .and()
+                        .body(user)
+                        .when()
+                        .post(CREATE_USER_URI);
+        accessToken = handleCreate.then()
+                .extract().path("accessToken");
+        return handleCreate;
     }
 
     @Step("Удаление пользователя")
-    public void delete() {
-        if (getAccessToken() == null) return;
-        given()
-                .spec(BaseSpec.getBaseSpec())
-                .headers("Authorization", accessToken)
-                .when()
-                .delete("auth/user")
-                .then()
-                .statusCode(SC_ACCEPTED);
-        System.out.println(getAccessToken());
+    public void deleteUser() {
+        if (accessToken != null) {
+            given()
+                    .header("Authorization", accessToken)
+                    .when()
+                    .delete(USER_URI)
+                    .then()
+                    .log().all();
+        }
     }
+
+    @Step("Авторизация пользователя")
+    public Response loginUser(User user){
+        handleLogin =
+                given()
+                        .header("Content-type", "application/json")
+                        .and()
+                        .body(user)
+                        .when()
+                        .post(LOGIN_USER_URI);
+        accessToken = handleLogin.then()
+                .extract().path("accessToken");
+        return handleLogin;
+    }
+
+    @Step("Изменение почты авторизованного пользователя")
+    public Response changeEmailUser(User user1){
+        return
+                given()
+                        .header("Authorization", accessToken)
+                        .header("Content-type", "application/json")
+                        .body(user1)
+                        .when()
+                        .patch(USER_URI);
+    }
+
+    @Step("Изменение почты не авторизованного пользователя")
+    public Response changeEmailUnauthorizedUser(User user1){
+        return
+                given()
+                        .header("Content-type", "application/json")
+                        .body(user1)
+                        .when()
+                        .patch(USER_URI);
+    }
+
 
 }

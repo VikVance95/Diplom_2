@@ -1,23 +1,23 @@
 package model;
 
-import net.datafaker.Faker;
-import lombok.Getter;
+import lombok.*;
 
 @Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
+@EqualsAndHashCode
+@Builder
 public class User {
 
-    static Faker faker = new Faker();
-
-    private String name;
     private String email;
     private String password;
+    private String name;
 
-    public User getData() {
-        email = faker.internet().emailAddress().toLowerCase();
-        password = faker.internet().password();
-        name = faker.name().firstName();
-
-        return this;
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
     }
 
 }
